@@ -1,63 +1,51 @@
-import nltk
-from nltk.stem.porter import *
-import re
-import string
-import numpy as np
-import pandas as pd
-#from nltk.corpus import stopwords
-from sklearn.feature_extraction.text import TfidfVectorizer
-
 from datasets import load_dataset
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trainer, TrainingArguments
 
 ds = load_dataset("ruanchaves/hatebr")
+#print(ds)
+#print(ds['train'][0])
 
-#nltk.download('rslp')
+model_name = 'neuralmind/bert-large-portuguese-cased'
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2)
 
-stopwords_pt =stopwords = nltk.corpus.stopwords.words('portuguese')
-other_exclusions = ["#ff", "ff", "rt"]
-stopwords.extend(other_exclusions)
+def tokenize_function(examples):
+    return tokenizer(
+        examples["instagram_comments"],
+        padding="max_length",
+        truncation=True,
+        max_length=512,
+    )
 
-stemmer_pt = nltk.stem.RSLPStemmer()
+tokens_ds = ds.map(tokenize_function, batched=True)
+tokens_ds = tokens_ds.rename_column("offensive_language", "labels")
+tokens_ds = tokens_ds.map(lambda x: {"labels": [int(x["labels"])]}) 
 
-def preprocess(text_string):
-    space_pattern = r'\s+'
-    url_regex = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
-    mention_regex = r'@[\w\-]+'
-    parsed_text = re.sub(space_pattern, ' ', text_string)
-    parsed_text = re.sub(url_regex, 'URLAQUI', parsed_text)
-    parsed_text = re.sub(mention_regex, '', "MENCAO", parsed_text)
-    return parsed_text
+ds_split = tokens_ds['train'].train_test_split(test_size=0.2)
 
-def tokenize(text):
-    text = " ".join(re.split("[^a-zA-Z]*", text.lower())).strip()
-    tokens = [stemmer_pt.stem(t) for t in text.split() if t not in stopwords_pt]
-    return tokens
+#print(ds_split['train'][0].keys())
 
-vectorizer = TfidfVectorizer(
-    tokenizer=tokenize,
-    preprocessor=preprocess,
-    max_features=1000,
-    ngram_range=(1, 3),
-    stop_words=stopwords_pt,
-    decode_error='replace',
+#print(tokens_ds['train'][0])
+
+columns_to_remove = [col for col in tokens_ds['train'].column_names if col not in ['input_ids', 'attention_mask', 'labels']]
+tokens_ds = tokens_ds.remove_columns(columns_to_remove)
+
+#print(tokens_ds['train'][0])
+
+
+training_args = TrainingArguments(
+    output_dir='./results',
+    num_train_epochs=3,
+    per_device_train_batch_size=16,
+    evaluation_strategy="epoch",
+    save_strategy="epoch",
 )
 
-tfidf = vectorizer.fit_transform(ds['train']['instagram_comments'])
-vocab = { v:i for i, v in enumerate(vectorizer.get_feature_names_out()) }
-
-def vectorize(tokens):
-    total = len(tokens)
-    vec = np.zeros(len(vocab))
-    for t in tokens:
-        if t in vocab:
-            vec[vocab[t]] += 1 / total
-    return vec
-
-pos_vect = TfidfVectorizer(
-    tokenizer=tokenize,
-    preprocessor=preprocess,
-    max_features=1000,
-    ngram_range=(1, 3),
-    stop_words=stopwords_pt,
-    decode_error='replace',
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=ds_split['train'],
+    eval_dataset=ds_split['test'],
 )
+
+trainer.train()
