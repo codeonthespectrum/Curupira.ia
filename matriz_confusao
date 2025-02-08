@@ -1,0 +1,11 @@
+from sklearn.metrics import confusion_matrix
+
+# Get predictions using the trainer object
+predictions = trainer.predict(ds_split['test'])
+# Access predicted labels and ground truth labels
+y_pred = predictions.predictions.argmax(-1)
+y_test = predictions.label_ids
+
+# Compute and print the confusion matrix
+cm = confusion_matrix(y_test, y_pred)
+print(cm)
