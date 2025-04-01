@@ -7,6 +7,7 @@
 </p>
 
 > <img src="https://img.shields.io/badge/Status-Active_Development-red?style=for-the-badge" alt="Status"/>
+> <a href="https://doi.org/10.5281/zenodo.15119695"><img src="https://zenodo.org/badge/919139798.svg" alt="DOI"></a>
 ## Table of Contents
 
 - [Project Description](#project-description-)
